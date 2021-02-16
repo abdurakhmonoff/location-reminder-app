@@ -5,10 +5,12 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.content.res.Resources
+import android.location.Location
 import android.os.Bundle
 import android.util.Log
 import android.view.*
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -19,8 +21,8 @@ import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
-import com.google.android.gms.maps.model.PointOfInterest
 import com.udacity.project4.R
 import com.udacity.project4.base.BaseFragment
 import com.udacity.project4.databinding.FragmentSelectLocationBinding
@@ -38,8 +40,8 @@ class SelectLocationFragment : BaseFragment(), OnMapReadyCallback {
     private lateinit var binding: FragmentSelectLocationBinding
     private lateinit var map: GoogleMap
     private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
-
-    private var selectedPoi: PointOfInterest? = null
+    private lateinit var marker: Marker
+    private var isLocationSelected = false
 
     companion object {
         const val REQUEST_LOCATION_PERMISSION = 1
@@ -64,11 +66,10 @@ class SelectLocationFragment : BaseFragment(), OnMapReadyCallback {
         mapFragment.getMapAsync(this)
 
         binding.saveBtn.setOnClickListener {
-            if (selectedPoi != null) {
-                _viewModel.selectedPOI.value = selectedPoi
-                _viewModel.reminderSelectedLocationStr.value = selectedPoi!!.name
-                _viewModel.latitude.value = selectedPoi!!.latLng.latitude
-                _viewModel.longitude.value = selectedPoi!!.latLng.longitude
+            if (isLocationSelected) {
+                _viewModel.reminderSelectedLocationStr.value = marker.title
+                _viewModel.latitude.value = marker.position.latitude
+                _viewModel.longitude.value = marker.position.longitude
                 activity?.onBackPressed()
             } else {
                 Toast.makeText(context, "Please select location!", Toast.LENGTH_SHORT).show()
@@ -79,15 +80,26 @@ class SelectLocationFragment : BaseFragment(), OnMapReadyCallback {
     }
 
     private fun onLocationSelected() {
+        map.setOnMapClickListener { latLng ->
+            map.clear()
+            isLocationSelected = true
+            val title = "Lat: ${latLng.latitude}\nLng: ${latLng.longitude}"
+            marker = map.addMarker(
+                MarkerOptions()
+                    .title(title)
+                    .position(latLng)
+            )
+            marker.showInfoWindow()
+        }
         map.setOnPoiClickListener { poi ->
             map.clear()
-            val poiMarker = map.addMarker(
+            isLocationSelected = true
+            marker = map.addMarker(
                 MarkerOptions()
                     .title(poi.name)
                     .position(poi.latLng)
             )
-            poiMarker.showInfoWindow()
-            selectedPoi = poi
+            marker.showInfoWindow()
         }
     }
 
@@ -118,58 +130,45 @@ class SelectLocationFragment : BaseFragment(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         map = googleMap
 
-        moveCameraToCurrentLocation()
+        setMapStyle(map)
         onLocationSelected()
         enableMyLocation()
-        setMapStyle(map)
     }
 
-    @Suppress("DEPRECATED_IDENTITY_EQUALS")
     private fun isPermissionGranted(): Boolean {
         return ContextCompat.checkSelfPermission(
-            context!!,
+            requireContext(),
             Manifest.permission.ACCESS_FINE_LOCATION
-        ) === PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun moveCameraToCurrentLocation() {
-        try {
-            if (isPermissionGranted()) {
-                val locationResult = fusedLocationProviderClient.lastLocation
-                locationResult.addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        if (task.result != null) {
-                            map.moveCamera(
-                                CameraUpdateFactory.newLatLngZoom(
-                                    LatLng(
-                                        task.result!!.latitude,
-                                        task.result!!.longitude
-                                    ), 15.0f
-                                )
-                            )
-                        }
-                    }
-                }
-            } else {
-                requestPermissions(
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                    REQUEST_LOCATION_PERMISSION
-                )
-            }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Error while moving camere: ", e)
-        }
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     @SuppressLint("MissingPermission")
+    private fun moveCameraToCurrentLocation() {
+        fusedLocationProviderClient.lastLocation.addOnSuccessListener { location: Location? ->
+            if (location != null) {
+                map.moveCamera(
+                    CameraUpdateFactory.newLatLngZoom(
+                        LatLng(location.latitude, location.longitude),
+                        16.0f
+                    )
+                )
+            }
+        }
+    }
+
     private fun enableMyLocation() {
-        if (isPermissionGranted()) {
-            map.isMyLocationEnabled = true
-        } else {
+        if (ActivityCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             requestPermissions(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
                 REQUEST_LOCATION_PERMISSION
             )
+        } else {
+            map.isMyLocationEnabled = true
+            moveCameraToCurrentLocation()
         }
     }
 
@@ -181,7 +180,6 @@ class SelectLocationFragment : BaseFragment(), OnMapReadyCallback {
         if (requestCode == REQUEST_LOCATION_PERMISSION) {
             if (grantResults.isNotEmpty() && (grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
                 enableMyLocation()
-                moveCameraToCurrentLocation()
             }
         }
     }

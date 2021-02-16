@@ -27,6 +27,10 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
     testOptions.unitTests {
         includeAndroidResources = true
         returnDefaultValues = true
@@ -114,7 +118,7 @@ dependencies {
     implementation "androidx.fragment:fragment:$fragmentVersion"
     androidTestImplementation "org.mockito:mockito-core:$mockitoVersion"
     androidTestImplementation "com.linkedin.dexmaker:dexmaker-mockito:$dexMakerVersion"
-    androidTestImplementation('org.koin:koin-test:2.0.1') { exclude group: 'org.mockito' }
+    androidTestImplementation('org.koin:koin-test:2.2.2') { exclude group: 'org.mockito' }
 
     // firebase
     implementation 'com.firebaseui:firebase-ui-auth:5.0.0'
